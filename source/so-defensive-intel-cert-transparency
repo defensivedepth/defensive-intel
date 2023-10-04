@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+#Copyright Security Onion Solutions LLC and/or licensed to Security Onion Solutions LLC under one  
+#or more contributor license agreements. Licensed under the Elastic License 2.0 as shown at  
+#https://securityonion.net/license; you may not use these files except in compliance with the  
+#Elastic License 2.0.
+
+# DB Creation:
+# sqlite3 db/cert-transparency.sql
+# create table certlogs(uuid text, targetdomain text);
+
+# Load list of domains
+while read -r TARGETDOMAIN
+do       
+    printf "\nQuerying for: $TARGETDOMAIN\n\n"
+    RESPONSE=$(curl "https://api.certspotter.com/v1/issuances?domain=$TARGETDOMAIN&expand=dns_names&expand=issuer")
+    NOCHANGECOUNT=0
+
+    # Read each item in the JSON array to an item in the Bash array
+    readarray -t LOGS < <(jq -c '.[]' <<< $RESPONSE)
+
+    # Iterate through the Bash array
+    for CTLOG in "${LOGS[@]}"; do
+        printf "\n\nIterating....\n"
+        RESULTID=$(jq --raw-output '.id' <<< "$CTLOG")
+        printf "\nResult ID: $RESULTID\n"
+
+        # Query for existing ResultID. 
+        EXISTS=$(sqlite3 db/cert-transparency.sql "SELECT '1' FROM certlogs WHERE UUID = '$RESULTID';")
+
+        if [[ "$EXISTS" != "1" ]]; then
+          printf "New Cert Log - Update DB & write out ingest log."
+          STATUS="new_service" && NEWCOUNT=$((NEWCOUNT + 1))
+          sqlite3 db/cert-transparency.sql "INSERT OR IGNORE INTO certlogs(UUID, targetdomain) VALUES('$UUID', '$TARGETDOMAIN')"
+          echo $CTLOG >> /nsm/defensive-intel/cert-transparency.log
+          #echo $CTLOG >> cert-transparency.log
+        else
+          echo "Existing Cert Log, discarding..."
+          NOCHANGECOUNT=$((NOCHANGECOUNT + 1))
+        fi
+        
+    done
+
+done < <( yq -r '.certificate-transparency.target-domains[]' config.yaml)
+
+TOTALCOUNT=$(sqlite3 db/cert-transparency.sql "SELECT count(UUID) FROM certlogs;")
+
+printf "\n\n == Summary ==\n\n"
+printf "New Logs: $NEWCOUNT\nNo Change: $NOCHANGECOUNT\n\nTotal Saved Logs: $TOTALCOUNT\n"

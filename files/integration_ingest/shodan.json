@@ -1,0 +1,30 @@
+{
+  "package": {
+    "name": "log",
+    "version": ""
+  },
+  "name": "defensive_intel-shodan-logs",
+  "namespace": "default",
+  "description": "shodan",
+  "policy_id": "so-grid-nodes_general",
+  "vars": {},
+  "inputs": {
+    "logs-logfile": {
+      "enabled": true,
+      "streams": {
+        "log.logs": {
+          "enabled": true,
+          "vars": {
+            "paths": [
+              "/nsm/defensive-intel/shodan.log"
+            ],
+            "data_stream.dataset": "shodan",
+            "custom": "",
+            "processors": "- decode_json_fields:\n    fields: [\"message\"]\n    target: \"\"\n    add_error_key: true\n- drop_fields:\n    fields: [ \"http.favicon\",\"message\",\"ssl.cert.serial\",\"cloud.service\" ]\n    ignore_missing: true\n- rename:\n    fields:\n      - from: \"tag\"\n        to: \"shodan.tag\"\n      - from: \"_shodan.module\"\n        to: \"network.protocol\"\n      - from: \"product\"\n        to: \"network.application\"\n      - from: \"hostnames\"\n        to: \"network.domain\"\n      - from: \"ssl.cert.issuer.O\"\n        to: \"x509.issuer.org\"\n      - from: \"ssl.cert.subject.CN\"\n        to: \"x509.subject.common_name\"\n    ignore_missing: true\n- add_fields:\n    target: event\n    fields:\n      category: host\n      module: defensive_intel",
+            "tags": []
+          }
+        }
+      }
+    }
+  }
+}

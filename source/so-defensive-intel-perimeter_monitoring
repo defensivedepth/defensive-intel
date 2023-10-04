@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+#Copyright Security Onion Solutions LLC and/or licensed to Security Onion Solutions LLC under one  
+#or more contributor license agreements. Licensed under the Elastic License 2.0 as shown at  
+#https://securityonion.net/license; you may not use these files except in compliance with the  
+#Elastic License 2.0.
+
+#sqlite3 db/perimeter-monitoring.sql
+#create table findings(IP text, Protocol text, Port text, State text);
+
+
+update_database () {
+   sqlite3 db/perimeter-monitoring.sql "INSERT OR IGNORE INTO findings(IP, Protocol, Port, State) VALUES('$1', '$2','$3', '$4')"
+} 
+
+process_results () {
+    # Read each item in the JSON array to an item in the bash array
+    readarray -t JSON < <(jq -c '.nmaprun.host' < "scan-output.json")
+
+    # Iterate through the bash array
+    for HOST in "${JSON[@]}"; do  
+        TARGETIP=$(jq -r '.address."@addr"' <<< "$HOST")
+        TARGETHOSTNAME=$(jq -r '.hostnames.hostname."@name"' <<< "$HOST")
+        printf "\n\nTarget IP: $TARGETIP"
+
+        # Query for existing ResultID.
+        EXISTS=$(sqlite3 db/perimeter-monitoring.sql "SELECT '1' FROM findings WHERE IP = '$TARGETIP' limit 1;")
+        if [[ "$EXISTS" != "1" ]]; then
+            printf "\nNew finding. Update DB & write out log\n"
+            #sqlite3 cloudenum.sql "INSERT OR IGNORE INTO findings(IP, Protocol, Port, State) VALUES('$UUID', '$CLOUD','$NAME', '$DOMAIN', '$NEWSTATE')"
+            NEWFINDING="1"
+        else
+            printf "\nExisting finding..."
+            NEWFINDING="0"
+        fi
+        
+        readarray -t OPENPORTS < <(jq -c  '.ports.port[]' <<< "$HOST")
+        UPDATEDFINDING="0"
+        for OPENPORT in "${OPENPORTS[@]}"; do
+            TRANSPORTPROTOCOL=$(jq -r '."@protocol"' <<< "$OPENPORT") #TCP
+            PORTNUMBER=$(jq -r '."@portid"' <<< "$OPENPORT") #53
+            SERVICE=$(jq -r '.service."@name"' <<< "$OPENPORT") #DNS
+            NEWPORTSTATUS=$(jq -r '.state."@state"' <<< "$OPENPORT") #OPEN
+
+            printf "\nPort: $TRANSPORTPROTOCOL/$PORTNUMBER: $NEWPORTSTATUS"
+            if [[ "$NEWFINDING" != "1" ]]; then
+                SAVEDPORTSTATUS=$(sqlite3 db/perimeter-monitoring.sql "SELECT State FROM findings WHERE IP = '$TARGETIP' AND Protocol = '$TRANSPORTPROTOCOL' and Port = '$PORTNUMBER' limit 1;")
+                if [[ "$SAVEDPORTSTATUS" != "$NEWPORTSTATUS" || "$SAVEDPORTSTATUS" == "" ]]; then
+                    #Port Status has changed - update database and set $UPDATEDFINDING to True
+                    CHANGE="$TRANSPORTPROTOCOL$PORT-->$NEWPORTSTATUS"
+                    UPDATEDFINDING="1"
+                fi
+            fi
+            if [[ "$UPDATEDFINDING" = "1" || "$NEWFINDING" = "1" ]]; then
+                printf "Port State changed...\n"
+                update_database "$TARGETIP" "$TRANSPORTPROTOCOL" "$PORTNUMBER" "$NEWPORTSTATUS"
+
+                INGEST_LOG=$(jq -r --null-input \
+                --arg targetip "$TARGETIP" \
+                --arg hostname "$TARGETHOSTNAME" \
+                --arg transportprotocol "$TRANSPORTPROTOCOL" \
+                --arg portnumber "$PORTNUMBER" \
+                --arg objectstate "$NEWPORTSTATUS" \
+                --arg service "$SERVICE" \
+                '{"source_ip": $targetip, "network.hostname": $hostname, "network.transport": $transportprotocol, "port": $portnumber, "object_state": $objectstate, "network.protocol": $service}')
+
+                #echo $INGEST_LOG >> perimeter_monitoring_ingest.log
+                echo $INGEST_LOG >> /nsm/defensive-intel/perimeter-monitoring.log
+            fi
+        done
+    done
+}
+#done < <( yq -r '.target-domains.[]' target_domains.yaml)
+
+rm -rf scan-output.json
+
+nmap -T5 -open -oX - 192.168.17.39 | jc --xml > scan-output.json
+
+printf "\nPort Scan complete, processing results..."
+
+process_results
+
+TOTALCOUNT=$(sqlite3 db/perimeter-monitoring.sql "SELECT count(IP) FROM findings;")
+
+printf "\n\n == Summary ==\n\n"
+#printf "New Logs: $NEWCOUNT\nNo Change: $NOCHANGECOUNT\n\nTotal Saved Records: $TOTALCOUNT\n"
+printf "\n\nTotal Saved Records: $TOTALCOUNT\n"
