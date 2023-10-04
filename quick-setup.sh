@@ -6,7 +6,7 @@ echo "Copying over files & restarting Elastic Fleet & Elasticsearch..."
 
 cp files/final_ingest_pipeline.json /opt/so/saltstack/default/salt/elasticsearch/files/ingest/.fleet_final_pipeline-1
 
-cp files/integration_ingest/* /opt /opt/so/saltstack/default/salt/elasticfleet/files/integrations/grid-nodes_general/
+cp files/integration_ingest/* /opt/so/saltstack/default/salt/elasticfleet/files/integrations/grid-nodes_general/
 
 so-elastic-fleet-restart --force
 
