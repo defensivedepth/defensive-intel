@@ -1,0 +1,16 @@
+certificate-transparency:
+  target-domains:
+    - 'TargetDomainHere'
+  filter-domains:
+    - 'None'
+perimeter-monitoring:
+  target-hosts:
+    - 'TargetHostHere'
+shodan-monitoring:
+  target-keyword:
+    - 'TargetKeywordHere'
+cloud-enumeration:
+  target-keyword:
+    - 'TargetKeywordHere'
+  filter-domains:
+    - 'None'

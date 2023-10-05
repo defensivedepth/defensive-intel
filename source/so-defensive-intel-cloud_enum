@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+#Copyright Security Onion Solutions LLC and/or licensed to Security Onion Solutions LLC under one  
+#or more contributor license agreements. Licensed under the Elastic License 2.0 as shown at  
+#https://securityonion.net/license; you may not use these files except in compliance with the  
+#Elastic License 2.0.
+
+
+#sqlite3 db/cloud-enumeration.sql
+#create table findings(UUID text, cloud text, name text, domain text, state text);
+
+# Load list of domains
+while read -r TARGETPATTERN
+do
+    rm -f cloud-enumeration-output.json
+    printf "\nQuerying for: $TARGETPATTERN\n\n"
+    #python3 cloudhunter.py $TARGETPATTERN -b -of cloud-enumeration-output.json
+    python /cloud_hunter/cloudhunter.py $TARGETPATTERN -r /cloud_hunter/resolvers.txt -b -of cloud-enumeration-output.json
+
+    # Read each item in the JSON array to an item in the Bash array
+    readarray -t JSON < <(jq -c '.[]' < "cloud-enumeration-output.json")
+
+    # Iterate through the Bash array
+    for item in "${JSON[@]}"; do
+        printf "\nIterating..."  
+        CLOUD=$(jq --raw-output '.cloud' <<< "$item")
+        DOMAIN=$(jq --raw-output '.domain' <<< "$item")
+        NEWSTATE=$(jq --raw-output '.state' <<< "$item")
+        NAME=$(jq --raw-output '.name' <<< "$item")
+
+        printf "\nResult ID: $DOMAIN\n"
+        # Query for existing ResultID. 
+
+        # Calculate UUID
+        UUID=($(echo "$CLOUD"-"$DOMAIN" | shasum))
+        #printf "UUID is: $UUID"
+        EXISTS=$(sqlite3 db/cloud-enumeration.sql "SELECT '1' FROM findings WHERE UUID = '$UUID';")
+        SAVEDSTATED=$(sqlite3 db/cloud-enumeration.sql "SELECT state FROM findings WHERE UUID = '$UUID';")
+
+        if [[ "$SAVEDSTATED" != "$NEWSTATE" || "$EXISTS" != "1" ]]; then
+            echo "Finding details changed or is a new finding. Update DB & write out log"
+            if [ "$EXISTS" != "1" ]; then STATUS="new_finding" && NEWCOUNT=$((NEWCOUNT + 1)); else STATUS="changed_finding" && UPDATEDCOUNT=$((UPDATEDCOUNT + 1)); fi
+            sqlite3 db/cloud-enumeration.sql "INSERT OR IGNORE INTO findings(UUID, cloud, name, domain, state) VALUES('$UUID', '$CLOUD','$NAME', '$DOMAIN', '$NEWSTATE')"
+            #echo $item >> cloud_enum_ingest.log
+            echo $item >> /nsm/defensive-intel/cloud_enumeration.log
+        else
+            echo "No changes, discarding log."
+            NOCHANGECOUNT=$((NOCHANGECOUNT + 1))
+        fi
+    done 
+done < <( yq -r '.cloud-enumeration.target-keyword.[]' config.yaml)
+
+TOTALCOUNT=$(sqlite3 db/cloud-enumeration.sql "SELECT count(UUID) FROM findings;")
+
+printf "\n\n == Summary ==\n\n"
+printf "New Logs: $NEWCOUNT\nNo Change: $NOCHANGECOUNT\n\nTotal Saved Services: $TOTALCOUNT\n"

@@ -1,0 +1,32 @@
+{
+  "package": {
+    "name": "log",
+    "version": ""
+  },
+  "name": "defensive_intel-cloud_enumeration",
+  "namespace": "default",
+  "description": "",
+  "policy_id": "so-grid-nodes_general",
+  "vars": {},
+  "inputs": {
+    "logs-logfile": {
+      "enabled": true,
+      "streams": {
+        "log.logs": {
+          "enabled": true,
+          "vars": {
+            "paths": [
+              "/nsm/defensive-intel/cloud_enumeration.log"
+            ],
+            "data_stream.dataset": "cloud_enumeration",
+            "custom": "",
+            "processors": "- decode_json_fields:\n    fields: [\"message\"]\n    target: \"\"\n    add_error_key: true\n- drop_fields:\n    fields: [ \"http.favicon\",\"message\"]\n    ignore_missing: true\n- rename:\n    fields:\n      - from: \"cloud\"\n        to: \"cloud.provider\"\n      - from: \"domain\"\n        to: \"network.domain\"\n      - from: \"name\"\n        to: \"query_pattern\"\n      - from: \"state\"\n        to: \"object_state\"\n    ignore_missing: true\n- add_fields:\n    target: event\n    fields:\n      category: host\n      module: defensive_intel\n      action: \"new_finding\"",
+            "tags": [
+              "defensive_intel"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

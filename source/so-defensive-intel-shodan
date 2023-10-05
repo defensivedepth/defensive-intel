@@ -1,0 +1,81 @@
+#!/bin/bash
+
+#Copyright Security Onion Solutions LLC and/or licensed to Security Onion Solutions LLC under one  
+#or more contributor license agreements. Licensed under the Elastic License 2.0 as shown at  
+#https://securityonion.net/license; you may not use these files except in compliance with the  
+#Elastic License 2.0.
+
+# Initial Check: Pull down all results & insert them into db + ingest logs
+# Daily Check: Pull down new results & check them against current
+
+# TODO
+# - Add error check: 1) Make sure there is a search.json.gz
+# - TBD
+
+#sqlite3 db/shodan.sql
+#create table services(uuid text, html_hash text, port text, host_ip text, shodan_ts text);
+ 
+#query='ssl.cert.subject.cn:sans.org -product:"CloudFront httpd"'
+
+while getopts u:i: flag
+do
+    case "${flag}" in
+        u) update=${OPTARG};;  #true
+        i) initial=${OPTARG};; #true
+    esac
+done
+
+# If -update flag, download 90 results for $Query (beware, uses credits)
+if  [ "$update" ]; then /usr/local/bin/shodan download search 'ssl.cert.subject.cn:sans.org -product:"CloudFront httpd"' --limit 90; fi
+
+if  [ "$initial" ]; then
+ /usr/local/bin/shodan download search 'ssl.cert.subject.cn:sans.org -product:"CloudFront httpd"' --limit 300;
+ UPDATEDSERVICES=$(/usr/local/bin/shodan parse --fields http.html_hash,transport,port,ip_str,timestamp search.json.gz --separator=,)
+else
+ YESTERDAYUTC=$(date --date="yesterday" +"%Y-%m-%d" -u)
+ UPDATEDSERVICES=$(/usr/local/bin/shodan parse --fields http.html_hash,transport,port,ip_str,timestamp search.json.gz -f timestamp:$YESTERDAYUTC --separator=,)
+fi
+
+#- Loop through this list:
+for SERVICE in $UPDATEDSERVICES
+do
+ echo ""
+ echo "Working on: " $SERVICE
+ # Break string into an array: http.html_hash,transport,port,ip_str
+ IFS=',' read -a SERVICE <<< "$SERVICE"
+ # Calculate UUID
+ UUID=($(echo ${SERVICE[1]}${SERVICE[2]}${SERVICE[3]} | shasum))
+ UPDATEDHTMLHASH=${SERVICE[0]}
+ echo $UUID
+ # Pull current html_hash info from db
+ EXISTS=$(sqlite3 db/shodan.sql "SELECT '1' FROM services WHERE UUID = '$UUID';")
+ CURRENTHASH=$(sqlite3 db/shodan.sql "SELECT html_hash FROM services WHERE UUID = '$UUID';")
+
+ if [[ "$UPDATEDHTMLHASH" != "$CURRENTHASH" || "$EXISTS" != "1" ]]; then
+   if [ "$EXISTS" != "1" ]; then
+     echo "New service finding. Update DB & write out log"
+     STATUS="new_finding"
+     sqlite3 db/shodan.sql "INSERT OR IGNORE INTO services(UUID, html_hash, host_ip, port, shodan_ts) VALUES('$UUID', '$UPDATEDHTMLHASH','${SERVICE[3]}', '${SERVICE[2]}', '${SERVICE[4]}')"
+     NEWCOUNT=$((NEWCOUNT + 1))   
+   else 
+     echo "Service details changed. Update DB & write out log"
+     STATUS="config_changed"
+     sqlite3 db/shodan.sql "UPDATE services SET html_hash = '$UPDATEDHTMLHASH', shodan_ts = '${SERVICE[4]}' WHERE UUID = '$UUID';"
+     UPDATEDCOUNT=$((UPDATEDCOUNT + 1))
+   fi
+   
+   rm -f shodan-temp.json.gz
+   /usr/local/bin/shodan parse search.json.gz -f timestamp:$YESTERDAYUTC -f ip_str:${SERVICE[3]} -O shodan-temp
+   gunzip -c shodan-temp.json.gz | jq -r --arg STATUS "$STATUS" '. += {"event.action":$STATUS} | tostring' >> /nsm/defensive-intel/shodan.log
+ else
+   echo "No changes, discarding log."
+   NOCHANGECOUNT=$((NOCHANGECOUNT + 1))
+ fi
+done
+
+TOTALCOUNT=$(sqlite3 db/shodan.sql "SELECT count(UUID) FROM services;")
+
+
+printf "\n\n == Summary ==\n\n"
+printf "Date Filter: $YESTERDAYUTC\n\n"
+printf "New Services: $NEWCOUNT\nUpdated Services: $UPDATEDCOUNT\nNo Change: $NOCHANGECOUNT\n\nTotal Saved Services: $TOTALCOUNT\n"

@@ -1,0 +1,32 @@
+{
+  "package": {
+    "name": "log",
+    "version": ""
+  },
+  "name": "defensive-intel_cert_transparency",
+  "namespace": "default",
+  "description": "Defensive-Intel_Certspotter",
+  "policy_id": "so-grid-nodes_general",
+  "vars": {},
+  "inputs": {
+    "logs-logfile": {
+      "enabled": true,
+      "streams": {
+        "log.logs": {
+          "enabled": true,
+          "vars": {
+            "paths": [
+              "/nsm/defensive-intel/cert-transparency.log"
+            ],
+            "data_stream.dataset": "certificate_transparency",
+            "custom": "",
+            "processors": "- decode_json_fields:\n    fields: [\"message\"]\n    target: \"\"\n    add_error_key: true\n- drop_fields:\n    fields: [ \"http.favicon\",\"message\"]\n    ignore_missing: true\n- copy_fields:\n    fields:\n      - from: \"dns_names\"\n        to: \"network.domain\"\n    fail_on_error: false\n    ignore_missing: true\n- rename:\n    fields:\n      - from: \"issuer.friendly_name\"\n        to: \"x509.issuer.org\"\n      - from: \"issuer.name\"\n        to: \"x509.issuer.distinguished_name\"\n      - from: \"not_after\"\n        to: \"x509.not_after\"\n      - from: \"not_before\"\n        to: \"x509.not_before\"\n      - from: \"revoked\"\n        to: \"x509.revoked\"\n      - from: \"dns_names\"\n        to: \"x509.subject.common_name\"\n    ignore_missing: true\n- add_fields:\n    target: event\n    fields:\n      category: host\n      module: defensive_intel\n      action: \"new_finding\"",
+            "tags": [
+              "defensive_intel"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
