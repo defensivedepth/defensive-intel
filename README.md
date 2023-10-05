@@ -1,6 +1,10 @@
 # Security Onion - Defensive Intel
 
-Coming soon....
+Proof of Concept set of scripts & config to monitor (and ingest resulting logs to Security Onion):
+- Perimeter Monitoring
+- Shodan
+- Certificate Transparency
+- Cloud Enumeration
 
 ## License
 
