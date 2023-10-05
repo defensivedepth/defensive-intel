@@ -1,16 +1,16 @@
 certificate-transparency:
   target-domains:
-    - 'sans.org'
+    - 'TargetDomainHere'
   filter-domains:
     - 'None'
 perimeter-monitoring:
   target-hosts:
-    - 'sans.org'
+    - 'TargetHostHere'
 shodan-monitoring:
   target-keyword:
-    - 'sans.org'
+    - 'TargetKeywordHere'
 cloud-enumeration:
   target-keyword:
-    - 'securityonion'
+    - 'TargetKeywordHere'
   filter-domains:
     - 'None'
