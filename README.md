@@ -1,6 +1,6 @@
 # Security Onion - Defensive Intel
 
-roof of Concept set of scripts & config to monitor (and ingest resulting logs to Security Onion):
+Proof of Concept set of scripts & config to monitor (and ingest resulting logs to Security Onion):
 - Perimeter Monitoring
 - Shodan
 - Certificate Transparency
