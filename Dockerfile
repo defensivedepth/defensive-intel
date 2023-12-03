@@ -7,7 +7,7 @@ RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 RUN apt update && apt-get install -y sudo nmap jq sqlite3 wget git curl jc && rm -rf /var/lib/apt/lists/*
 
 RUN pip install shodan
-##RUN shodan init Your_Shodan_API_Key
+#RUN shodan init Your_Shodan_API_Key
 
 RUN git clone https://github.com/belane/CloudHunter.git /cloud_hunter
 RUN pip install -r /cloud_hunter/requirements.txt
