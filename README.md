@@ -1,4 +1,4 @@
-# Security Onion - Defensive Intel
+s# Security Onion - Defensive Intel
 
 
 Proof of Concept set of scripts & config to monitor (and ingest resulting logs to Security Onion):
