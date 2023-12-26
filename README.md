@@ -1,4 +1,4 @@
-dd:wqd# Security Onion - Defensive Intel
+dddd:wqd# Security Onion - Defensive Intel
 
 
 Proof of Concept set of scripts & config to monitor (and ingest resulting logs to Security Onion):
